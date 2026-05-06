@@ -466,28 +466,32 @@ async function joinSubmitToDb(){
 }
 
 async function checkJoinLink(){
-  const params=new URLSearchParams(window.location.search);
-  const joinId=params.get('join');
-  if(!joinId)return;
-  const {data,error}=await sb.from('meats').select('*').eq('id',joinId).single();
-  if(error||!data){alert('Meat not found!');return;}
-  evtData={name:data.name,start:data.start_date,end:data.end_date,timeStart:data.time_start,timeEnd:data.time_end,step:data.slot_size,id:data.id};
-  await loadParticipants();
-  document.getElementById('joinTitle').textContent=evtData.name;
-  document.getElementById('joinSubtitle').textContent='Someone wants to find a time for everyone';
-  document.getElementById('joinDates').textContent=fmtDate(evtData.start)+' – '+fmtDate(evtData.end);
-  document.getElementById('joinTimes').textContent=evtData.timeStart+' – '+evtData.timeEnd;
-  document.getElementById('joinCount').textContent=participants.length+' people responded';
-  document.getElementById('joinChips').innerHTML=participants.map(p=>`<div class="chip"><div class="cdot" style="background:var(--text3);"></div>${p.name}</div>`).join('');
-  document.getElementById('joinStep1').style.display='block';
-  document.getElementById('joinStep2').style.display='none';
-  document.getElementById('joinStep2b').style.display='none';
-  document.getElementById('joinName').value='';
-  joinSelections={};
-  setStep(1);
-  showScreen('join');
+  try{
+    const params=new URLSearchParams(window.location.search);
+    const joinId=params.get('join');
+    if(!joinId)return;
+    const {data,error}=await sb.from('meats').select('*').eq('id',joinId).single();
+    if(error||!data){alert('Meat not found!');return;}
+    evtData={name:data.name,start:data.start_date,end:data.end_date,timeStart:data.time_start,timeEnd:data.time_end,step:data.slot_size,id:data.id};
+    await loadParticipants();
+    document.getElementById('joinTitle').textContent=evtData.name;
+    document.getElementById('joinSubtitle').textContent='Someone wants to find a time for everyone';
+    document.getElementById('joinDates').textContent=fmtDate(evtData.start)+' – '+fmtDate(evtData.end);
+    document.getElementById('joinTimes').textContent=evtData.timeStart+' – '+evtData.timeEnd;
+    document.getElementById('joinCount').textContent=participants.length+' people responded';
+    document.getElementById('joinChips').innerHTML=participants.map(p=>`<div class="chip"><div class="cdot" style="background:var(--text3);"></div>${p.name}</div>`).join('');
+    document.getElementById('joinStep1').style.display='block';
+    document.getElementById('joinStep2').style.display='none';
+    document.getElementById('joinStep2b').style.display='none';
+    document.getElementById('joinName').value='';
+    joinSelections={};
+    setStep(1);
+    showScreen('join');
+  }catch(err){
+    console.error('Join link error:',err);
+  }
 }
-checkJoinLink();
+document.addEventListener('DOMContentLoaded', ()=>{ checkJoinLink(); });
 
 function resetAndCreate(){
   const t=new Date().toISOString().split('T')[0];
