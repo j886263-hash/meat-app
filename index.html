@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Meat</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --bg:#fafaf8;--bg2:#f0ede8;--bg3:#e8e4de;--card:#fff;
@@ -298,7 +299,7 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px
     <div class="share-bar">
       <input class="share-link" readonly id="shareLink" />
       <button class="btn-copy" id="copyBtn" onclick="copyLink()">📋 Copy link</button>
-      <button class="btn-ghost" style="font-size:13px;padding:9px 14px;" onclick="showJoinPreview()">👁 See what friends see</button>
+
     </div>
     <div id="bestBanner"></div>
     <div id="top10Panel" style="display:none;"></div>
@@ -398,6 +399,10 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px
 </div>
 
 <script>
+const SUPA_URL='https://vgilczvclavdqhhkkzqj.supabase.co';
+const SUPA_KEY='sb_publishable_uiOH85v4171kuzdSXwKLDg_ZrDpgULy';
+const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+
 if(window.matchMedia('(prefers-color-scheme: dark)').matches){document.documentElement.setAttribute('data-theme','dark');}
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',e=>{document.documentElement.setAttribute('data-theme',e.matches?'dark':'');});
 let evtData={}, participants=[], mySelections={}, myName='';
@@ -442,6 +447,48 @@ document.getElementById('startDate').value=today;
 document.getElementById('endDate').value=next4;
 
 /* ---- CREATE EVENT ---- */
+let myParticipantId=null;
+
+async function loadParticipants(){
+  if(!evtData.id)return;
+  const {data,error}=await sb.from('participants').select('*').eq('meat_id',evtData.id);
+  if(error){console.error(error);return;}
+  participants=data.filter(p=>p.name!==myName).map(p=>({name:p.name,slots:p.slots||{}}));
+}
+
+async function joinSubmitToDb(){
+  const existing=await sb.from('participants').select('id').eq('meat_id',evtData.id).eq('name',joinName).single();
+  if(existing.data){
+    await sb.from('participants').update({slots:joinSelections}).eq('id',existing.data.id);
+  } else {
+    await sb.from('participants').insert({meat_id:evtData.id,name:joinName,slots:joinSelections});
+  }
+}
+
+async function checkJoinLink(){
+  const params=new URLSearchParams(window.location.search);
+  const joinId=params.get('join');
+  if(!joinId)return;
+  const {data,error}=await sb.from('meats').select('*').eq('id',joinId).single();
+  if(error||!data){alert('Meat not found!');return;}
+  evtData={name:data.name,start:data.start_date,end:data.end_date,timeStart:data.time_start,timeEnd:data.time_end,step:data.slot_size,id:data.id};
+  await loadParticipants();
+  document.getElementById('joinTitle').textContent=evtData.name;
+  document.getElementById('joinSubtitle').textContent='Someone wants to find a time for everyone';
+  document.getElementById('joinDates').textContent=fmtDate(evtData.start)+' – '+fmtDate(evtData.end);
+  document.getElementById('joinTimes').textContent=evtData.timeStart+' – '+evtData.timeEnd;
+  document.getElementById('joinCount').textContent=participants.length+' people responded';
+  document.getElementById('joinChips').innerHTML=participants.map(p=>`<div class="chip"><div class="cdot" style="background:var(--text3);"></div>${p.name}</div>`).join('');
+  document.getElementById('joinStep1').style.display='block';
+  document.getElementById('joinStep2').style.display='none';
+  document.getElementById('joinStep2b').style.display='none';
+  document.getElementById('joinName').value='';
+  joinSelections={};
+  setStep(1);
+  showScreen('join');
+}
+checkJoinLink();
+
 function resetAndCreate(){
   const t=new Date().toISOString().split('T')[0];
   const n=new Date(Date.now()+4*86400000).toISOString().split('T')[0];
@@ -453,23 +500,24 @@ function resetAndCreate(){
   document.getElementById('slotSize').value='30';
   showScreen('create');
 }
-function makeEvent(){
+async function makeEvent(){
   const name=document.getElementById('eventName').value.trim()||'My Meat';
   const s=document.getElementById('startDate').value||today;
   const e=document.getElementById('endDate').value||next4;
   const ts=document.getElementById('timeStart').value||'09:00';
   const te=document.getElementById('timeEnd').value||'21:00';
-  const step=document.getElementById('slotSize').value||'30';
-  evtData={name,start:s,end:e,timeStart:ts,timeEnd:te,step};
-  participants=[{name:'Alice',slots:{}},{name:'Marco',slots:{}}];
-  const dates=getDates(s,e),slots=getSlots(ts,te,step);
-  dates.forEach(d=>slots.forEach(t=>{
-    const k=d+'_'+t;
-    if(Math.random()>.38)participants[0].slots[k]=true;
-    if(Math.random()>.42)participants[1].slots[k]=true;
-  }));
-  mySelections={};myName='';activeFilter=null;top10Open=false;
-  pickSelections={};
+  const step=parseInt(document.getElementById('slotSize').value)||30;
+
+  const {data,error}=await sb.from('meats').insert({
+    name,start_date:s,end_date:e,time_start:ts,time_end:te,slot_size:step
+  }).select().single();
+
+  if(error){alert('Something went wrong, try again.');console.error(error);return;}
+
+  evtData={name,start:s,end:e,timeStart:ts,timeEnd:te,step,id:data.id};
+  participants=[];
+  mySelections={};myName='';activeFilter=null;top10Open=false;pickSelections={};
+
   document.getElementById('pickTitle').textContent=name+' 🥩 — When are you free?';
   document.getElementById('pickName').value='';
   buildPickGrid();
